@@ -1,4 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import BoardView from './components/BoardView';
+import CalendarView from './components/CalendarView';
+import DeletedTasksModal from './components/DeletedTasksModal';
+import DeleteBoardModal from './components/DeleteBoardModal';
+import ProjectsPage from './components/ProjectsPage';
+import TaskDetailsModal from './components/TaskDetailsModal';
+import WeekView from './components/WeekView';
 
 const STORAGE_KEYS = {
   page: 'scrum-board.page',
@@ -513,81 +520,21 @@ export default function App() {
 
   if (page === 'projects') {
     return (
-      <div className="page">
-        <header className="header-row">
-          <div>
-            <h1>Boards</h1>
-            <p>Select a board to continue.</p>
-          </div>
-        </header>
-
-        <form className="project-create project-create-page" onSubmit={createProject}>
-          <input
-            placeholder="New board name"
-            value={newProjectName}
-            onChange={(e) => setNewProjectName(e.target.value)}
-          />
-          <input
-            placeholder="Board description (optional)"
-            value={newProjectDescription}
-            onChange={(e) => setNewProjectDescription(e.target.value)}
-          />
-          <button type="submit">Add Board</button>
-        </form>
-
-        {error && <p className="error">{error}</p>}
-
-        <main className="project-list">
-          {projects.length === 0 ? <p className="empty">No boards yet. Create one to get started.</p> : null}
-          {projects.map((project) => {
-            const summary = projectSummaries[String(project.id)] || { total: 0, done: 0, overdue: 0, dueSoon: 0 };
-            const active = Math.max(0, summary.total - summary.done);
-
-            return (
-              <article key={project.id} className="project-card">
-                <strong>{project.name}</strong>
-                {project.description ? <p>{project.description}</p> : null}
-                <span>{summary.total} task{summary.total === 1 ? '' : 's'} • {active} active • {summary.done} done</span>
-                <small>
-                  {summary.overdue > 0 ? `${summary.overdue} overdue` : 'No overdue'}
-                  {' • '}
-                  {summary.dueSoon > 0 ? `${summary.dueSoon} due soon` : 'Nothing due soon'}
-                </small>
-                <div className="project-card-actions">
-                  <button type="button" className="secondary project-open" onClick={() => openProject(project.id)}>
-                    Open board
-                  </button>
-                  <button
-                    type="button"
-                    className="danger danger-inline project-delete"
-                    title={`Delete board: ${project.name}`}
-                    onClick={() => requestDeleteProject(project)}
-                  >
-                    Delete board
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </main>
-
-        {projectPendingDelete ? (
-          <div className="modal-backdrop" onClick={() => setProjectPendingDelete(null)}>
-            <section className="modal" onClick={(e) => e.stopPropagation()}>
-              <h2>Delete Board</h2>
-              <p className="modal-description">
-                Delete <strong>{projectPendingDelete.name}</strong> and all tasks in this board? This cannot be undone.
-              </p>
-              <div className="modal-actions">
-                <button className="secondary" onClick={() => setProjectPendingDelete(null)}>Cancel</button>
-                <button className="danger danger-inline" onClick={() => deleteProject(projectPendingDelete)}>
-                  Delete board
-                </button>
-              </div>
-            </section>
-          </div>
-        ) : null}
-      </div>
+      <ProjectsPage
+        error={error}
+        projects={projects}
+        newProjectName={newProjectName}
+        setNewProjectName={setNewProjectName}
+        newProjectDescription={newProjectDescription}
+        setNewProjectDescription={setNewProjectDescription}
+        createProject={createProject}
+        projectSummaries={projectSummaries}
+        openProject={openProject}
+        requestDeleteProject={requestDeleteProject}
+        projectPendingDelete={projectPendingDelete}
+        setProjectPendingDelete={setProjectPendingDelete}
+        deleteProject={deleteProject}
+      />
     );
   }
 
@@ -657,244 +604,78 @@ export default function App() {
       {loading ? <p>Loading...</p> : null}
 
       {view === 'board' ? (
-        <main className="board">
-          {columns.map((col) => (
-            <section
-              key={col.key}
-              className={`column ${dragOverColumn === col.key ? 'column-drop-active' : ''}`}
-              onDragOver={(e) => onDragOverColumn(e, col.key)}
-              onDrop={(e) => onDropToColumn(e, col.key)}
-              onDragLeave={() => setDragOverColumn((prev) => (prev === col.key ? '' : prev))}
-            >
-              <h2>{col.label}</h2>
-              <div className="cards">
-                {grouped[col.key]?.map((task) => (
-                  <article
-                    className={`card ${draggingTaskId === task.id ? 'card-dragging' : ''}`}
-                    key={task.id}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, task.id)}
-                    onDragEnd={onDragEnd}
-                  >
-                    <h3>{task.title}</h3>
-                    {task.description ? <p>{task.description.slice(0, 90)}{task.description.length > 90 ? '…' : ''}</p> : null}
-
-                    <p className="meta">Due: {formatDate(task.due_date)}</p>
-                    <button className="secondary" onClick={() => setSelectedTaskId(task.id)}>Details</button>
-
-                    <div className="row">
-                      <label>Status</label>
-                      <select value={task.status} onChange={(e) => patchTask(task.id, { status: e.target.value })}>
-                        {columns.map((c) => (
-                          <option key={c.key} value={c.key}>{c.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="row">
-                      <label>Priority</label>
-                      <select value={task.priority} onChange={(e) => patchTask(task.id, { priority: e.target.value })}>
-                        {priorities.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="row">
-                      <label>Due</label>
-                      <div className="due-input-row">
-                        <input
-                          type="date"
-                          value={asDateOnly(task.due_date)}
-                          onInput={(e) => handleDueDateInputChange(task.id, e)}
-                        />
-                        <button
-                          type="button"
-                          className="secondary due-clear"
-                          onClick={() => patchTask(task.id, { due_date: null })}
-                          disabled={!asDateOnly(task.due_date)}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    <button className="danger" onClick={() => removeTask(task.id)}>Delete</button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
-        </main>
+        <BoardView
+          columns={columns}
+          grouped={grouped}
+          dragOverColumn={dragOverColumn}
+          setDragOverColumn={setDragOverColumn}
+          draggingTaskId={draggingTaskId}
+          onDragOverColumn={onDragOverColumn}
+          onDropToColumn={onDropToColumn}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          formatDate={formatDate}
+          asDateOnly={asDateOnly}
+          setSelectedTaskId={setSelectedTaskId}
+          patchTask={patchTask}
+          priorities={priorities}
+          handleDueDateInputChange={handleDueDateInputChange}
+          removeTask={removeTask}
+        />
       ) : null}
 
       {view === 'week' ? (
-        <main className="week-view">
-          {weekBuckets.weeks.map((bucket) => (
-            <section
-              key={bucket.key}
-              className={`week-column ${dragOverWeekKey === bucket.key ? 'drop-active' : ''}`}
-              onDragOver={(e) => onDragOverWeek(e, bucket.key)}
-              onDrop={(e) => onDropToWeek(e, bucket.key)}
-              onDragLeave={() => setDragOverWeekKey((prev) => (prev === bucket.key ? '' : prev))}
-            >
-              <h2>{bucket.title}</h2>
-              <div className="cards">
-                {bucket.items.length === 0 ? <p className="empty">No tasks for this week. Drop a task here to schedule it.</p> : null}
-                {bucket.items.map((task) => (
-                  <article
-                    className={`card ${draggingTaskId === task.id ? 'card-dragging' : ''}`}
-                    key={task.id}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, task.id)}
-                    onDragEnd={onDragEnd}
-                  >
-                    <h3>{task.title}</h3>
-                    <p className="meta">{columns.find((c) => c.key === task.status)?.label || task.status} • {task.priority}</p>
-                    <p className="meta">Due: {formatDate(task.due_date)}</p>
-                    <button className="secondary" onClick={() => setSelectedTaskId(task.id)}>Details</button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
-
-          <section
-            className={`week-column ${dragOverWeekKey === 'unscheduled' ? 'drop-active' : ''}`}
-            onDragOver={(e) => onDragOverWeek(e, 'unscheduled')}
-            onDrop={(e) => onDropToWeek(e, 'unscheduled')}
-            onDragLeave={() => setDragOverWeekKey((prev) => (prev === 'unscheduled' ? '' : prev))}
-          >
-            <h2>Unscheduled</h2>
-            <div className="cards">
-              {weekBuckets.unscheduled.length === 0 ? <p className="empty">Everything is scheduled. Drop here to clear due dates.</p> : null}
-              {weekBuckets.unscheduled.map((task) => (
-                <article
-                  className={`card ${draggingTaskId === task.id ? 'card-dragging' : ''}`}
-                  key={task.id}
-                  draggable
-                  onDragStart={(e) => onDragStart(e, task.id)}
-                  onDragEnd={onDragEnd}
-                >
-                  <h3>{task.title}</h3>
-                  <p className="meta">{columns.find((c) => c.key === task.status)?.label || task.status} • {task.priority}</p>
-                  <button className="secondary" onClick={() => setSelectedTaskId(task.id)}>Details</button>
-                </article>
-              ))}
-            </div>
-          </section>
-        </main>
+        <WeekView
+          weekBuckets={weekBuckets}
+          dragOverWeekKey={dragOverWeekKey}
+          setDragOverWeekKey={setDragOverWeekKey}
+          draggingTaskId={draggingTaskId}
+          onDragOverWeek={onDragOverWeek}
+          onDropToWeek={onDropToWeek}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          setSelectedTaskId={setSelectedTaskId}
+          columns={columns}
+          formatDate={formatDate}
+        />
       ) : null}
 
       {view === 'calendar' ? (
-        <main className="calendar-view">
-          <div className="calendar-header">
-            <button className="secondary" onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}>← Prev</button>
-            <h2>{calendarData.monthLabel}</h2>
-            <button className="secondary" onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}>Next →</button>
-          </div>
-
-          <div className="calendar-grid weekdays">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div key={day}>{day}</div>)}
-          </div>
-
-          <div className="calendar-grid days">
-            {calendarData.cells.map((cell) => (
-              <article
-                className={`calendar-cell ${cell.inMonth ? '' : 'calendar-cell-muted'} ${dragOverDate === cell.key ? 'drop-active' : ''}`}
-                key={cell.key}
-                onDragOver={(e) => onDragOverDate(e, cell.key)}
-                onDrop={(e) => onDropToDate(e, cell.key)}
-                onDragLeave={() => setDragOverDate((prev) => (prev === cell.key ? '' : prev))}
-              >
-                <div className="calendar-day-number">{cell.date.getDate()}</div>
-                <div className="calendar-items">
-                  {cell.tasks.slice(0, 3).map((task) => (
-                    <button
-                      key={task.id}
-                      className={`calendar-pill ${draggingTaskId === task.id ? 'card-dragging' : ''}`}
-                      onClick={() => setSelectedTaskId(task.id)}
-                      title={task.title}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, task.id)}
-                      onDragEnd={onDragEnd}
-                    >
-                      {task.title}
-                    </button>
-                  ))}
-                  {cell.tasks.length > 3 ? <small className="meta">+{cell.tasks.length - 3} more</small> : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        </main>
+        <CalendarView
+          calendarData={calendarData}
+          dragOverDate={dragOverDate}
+          setDragOverDate={setDragOverDate}
+          draggingTaskId={draggingTaskId}
+          onDragOverDate={onDragOverDate}
+          onDropToDate={onDropToDate}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          setSelectedTaskId={setSelectedTaskId}
+          setCalendarMonth={setCalendarMonth}
+        />
       ) : null}
 
-      {projectPendingDelete ? (
-        <div className="modal-backdrop" onClick={() => setProjectPendingDelete(null)}>
-          <section className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Delete Board</h2>
-            <p className="modal-description">
-              Delete <strong>{projectPendingDelete.name}</strong> and all tasks in it? This cannot be undone.
-            </p>
-            <div className="modal-actions">
-              <button className="secondary" onClick={() => setProjectPendingDelete(null)}>Cancel</button>
-              <button className="danger danger-inline" onClick={() => deleteProject(projectPendingDelete)}>
-                Delete board
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <DeleteBoardModal
+        project={projectPendingDelete}
+        onCancel={() => setProjectPendingDelete(null)}
+        onConfirm={deleteProject}
+        bodyText="and all tasks in it"
+      />
 
-      {selectedTask ? (
-        <div className="modal-backdrop" onClick={() => setSelectedTaskId(null)}>
-          <section className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{selectedTask.title}</h2>
-            <p className="modal-meta">Status: {selectedTask.status} • Priority: {selectedTask.priority} • Due: {formatDate(selectedTask.due_date)}</p>
-            <p className="modal-description">{selectedTask.description || 'No description provided.'}</p>
-            <div className="modal-actions">
-              <button className="secondary" onClick={() => setSelectedTaskId(null)}>Close</button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <TaskDetailsModal
+        task={selectedTask}
+        onClose={() => setSelectedTaskId(null)}
+        formatDate={formatDate}
+      />
 
-      {showDeletedModal ? (
-        <div className="modal-backdrop" onClick={() => setShowDeletedModal(false)}>
-          <section className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Deleted Tasks</h2>
-            <p className="modal-meta">Historical archive from this board.</p>
-            <div className="deleted-list">
-              {filteredDeletedTasks.length === 0 ? (
-                <p className="modal-description">No deleted tasks for this board.</p>
-              ) : (
-                filteredDeletedTasks.map((task) => (
-                  <article className="deleted-item" key={task.id}>
-                    <strong>{task.title}</strong>
-                    <p>{task.description || 'No description provided.'}</p>
-                    <small>Status: {task.status} • Priority: {task.priority} • Due: {formatDate(task.due_date)} • Deleted: {new Date(task.deleted_at).toLocaleString()}</small>
-                    <div className="deleted-actions">
-                      <button className="secondary" onClick={() => restoreTask(task.id)}>Restore</button>
-                      <button
-                        className="danger danger-inline"
-                        onClick={() => permanentlyDeleteTask(task.id)}
-                        aria-label={`Permanently delete task: ${task.title}`}
-                        title="Permanently delete this task"
-                      >
-                        Permanently delete task
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-            <div className="modal-actions">
-              <button className="secondary" onClick={() => setShowDeletedModal(false)}>Close</button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <DeletedTasksModal
+        open={showDeletedModal}
+        onClose={() => setShowDeletedModal(false)}
+        tasks={filteredDeletedTasks}
+        formatDate={formatDate}
+        restoreTask={restoreTask}
+        permanentlyDeleteTask={permanentlyDeleteTask}
+      />
     </div>
   );
 }
